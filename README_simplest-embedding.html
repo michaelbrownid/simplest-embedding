@@ -1,0 +1,190 @@
+<pre>
+
+<header style="border-bottom: 1ps solid; background-color: #8c1515; text-align: center; font-size: 26; color:#fff; padding: 10;"><a style="color:#fff;" href="http://openboundlabs.com">openboundlabs.com</a></header>
+
+<main style="max-width:800px; padding: 30px;margin:0 auto;">
+
+<h2>Goal</h2>
+Simplest embedding problem using Tensorflow
+
+Inspiried from this: <a href="http://matpalm.com/blog/2015/03/28/theano_word_embeddings/">http://matpalm.com/blog/2015/03/28/theano_word_embeddings/</a>
+
+<img width=320px src="wiki-pic-major.png">
+<a href="https://colah.github.io/posts/2015-01-Visualizing-Representations/">https://colah.github.io/posts/2015-01-Visualizing-Representations/</a>
+<a href="https://colah.github.io/posts/2014-07-NLP-RNNs-Representations/">https://colah.github.io/posts/2014-07-NLP-RNNs-Representations/</a>
+
+I first worked with embedding vectors in machine learning / neural
+networks many years ago where we called them context vectors and used
+them to do things like automatic text summarization, named entity
+recognition, and semantic machine translation.
+
+Embedding is powerful: <a href="https://en.wikipedia.org/wiki/Word2vec">word2vec</a>, <a href="http://nlp.stanford.edu/projects/glove/">glove</a>, <a href="http://cs.stanford.edu/people/karpathy/deepimagesent/">neural image captioning</a>, ...
+Hinton started calling them <a href="https://deeplearning4j.org/thoughtvectors">thought vectors</a>.
+
+The basic idea to to embed objects that might not have much direct
+relation to each other into a space where higher semantic meaning
+might be more easily seen using simple operations like distance. An
+example is English words. Looking in the dictionary the words "happen"
+and "happy" occur right next to each other. However their meanings are
+quite different; alphabetic distance isn't too useful when dealing
+with words. Wouldn't it be nice to embed those words in a space where
+words with similar meanings are close to them (viz: synonyms
+happen==occur / happy==cheerful)....
+
+================================
+
+<h2>The Setup</h2>
+
+- Predict whether two objects (o and p) are "compatible" / should occur together or not.
+
+- Embed N arbitrary objects identified by integers into 2d (x,y) (so I can plot them)
+
+- Try learning a simple linear ordering "compatibility" function:
+
+  - Make adjacent pairs compatible Prob(o,p)=1.0 : (o,p) = (0,1), (1,2), (4,5), ...
+  
+  - Make all others incompatible Prob(o,p)=0.0 : (o,p) = (0,2), (3,5), ...
+
+  - Assume pairs are ordered so (o,p) -> p>o
+
+- Try a very simple learning network:
+
+  Input: (o, p) (object integers)
+
+  Embed: embedding(o) = 2d
+
+  Computation: f(o,p) = single linear layer.
+	       input = [embedding(x), embedding(y)]
+	       output= logit for [1-P, P] where P is probability o,p are compatible
+
+  Output: softmax of network output
+
+- The key here is that when learning, gradients can be pushed back to
+  the embedding vectors so they can be updated. It is _automatic_ in
+  frameworks like Tensorflow.
+
+Source Code: <a href="simplest-embedding.py">simplest-embedding.py</a>
+
+Note this is interesting because we will estimate both the embedding
+and the linear discriminant function on the embedding simultaneously.
+
+TODO: eliminate the linear function and use dot product with no
+learned parameters.
+
+================================
+
+<h2>RESULT</h2>
+Animate the embeddings and the decision boundries for the first 4
+points (colors=black, red, green, blue) every 3 epochs of optimization
+for 1000 epochs total.
+
+
+<div style="max-width:600;"><img id="i1" src="simpleimg1/simplest-embedding-120.png"></div>
+<div style="display: none;" id="i2"><img src="simpleimg1/simplest-embedding-120.png"></div>
+
+<div style="font-size:60%; border: 1px solid; background-color: rgba(1,1,1,0.2);">
+<h2>What experiment do you want to see?</h2>
+<input type="radio" name="exp" value="simpleimg1" checked="checked">Coverged1</br>
+<input type="radio" name="exp" value="simpleimg2">NotQuite</br>
+<input type="radio" name="exp" value="simpleimg3">Converged2</br>
+current <input id="curr" type="number" value="120"> / 333
+<button type="button" id="prev">prev</button> <button type="button" id="next">next</button><br>
+frame step <input id="step" type="number" value="1"><br>
+frame delay <input id="time" type="number" value="1000"> Smaller for faster animation!
+<h2>Animate!</h2><button style="width: 256px; height: 64px;" type="button" id="start">animate start/stop</button> <br>
+</div>
+
+
+================================
+
+The network can mostly learn the simple linear ordering! (A couple of
+errors when not converged fully)
+
+This isn't too exciting but it is interesting to see the nice linear
+chain that is learned from a number of pairwise examples. It reminds
+me of the Hammersley-Clifford theorem where a joint density can be
+factorized over cliques (<a href="https://en.wikipedia.org/wiki/Hammersley%E2%80%93Clifford_theorem">Hammersley-Clifford theorem</a>)
+
+<img width=128 src="Markov_random_field_example.png">
+
+It seems the ordering happens fairly quickly then the decision boundry
+tightens up.
+
+It is simple but interesting. Next it might be interesting to take ZIP
+codes and embed them. First simply try to "learn"
+ZIP->(latitude,longitude). Then try to pull out additional covariates
+like median income, total population, ..., from the embedded vectors.
+
+================================
+</main>
+
+<footer style="border-top: 1px solid; padding: 30px 0;"> <a href="http://openboundlabs.com">openboundlabs.com</a> <a href="mailto:michaelbrownid@openboundlabs.com">michaelbrownid@openboundlabs.com</a> Michael P.S. Brown. Fri Dec 23 11:16:44 PST 2016</footer>
+
+<script>
+
+imglist = function(num){
+  myexp = document.querySelector('input[name="exp"]:checked').value;
+  return(""+myexp+"/simplest-embedding-"+3*num+".png")
+}
+
+var current=120;
+var myinterval = null;
+var mysrc;
+var s;
+var img1;
+
+
+updateimg = function() {
+  mysrc = imglist(current)
+  document.getElementById("i1").src=mysrc
+  //document.getElementById("i1").width=500
+  document.getElementById("curr").value = ""+current
+
+  mysrc = "<img src='" + imglist(nextval()) + "'>"
+  document.getElementById("i2").innerHTML=mysrc
+
+}
+
+prevval = function(){
+  tmp = current -parseInt(step.value)
+  if (tmp<0){ tmp = 333; }
+  return(tmp)
+}
+nextval = function(){
+  tmp = current +parseInt(step.value)
+  if (tmp>333){ tmp = 0; }
+  return(tmp)
+}
+
+hitprev = function(){
+  current = prevval()
+  updateimg()
+}
+hitnext = function(){
+  current = nextval()
+  updateimg()
+}
+
+
+document.getElementById("prev").onclick = hitprev;
+document.getElementById("next").onclick = hitnext;
+
+document.getElementById("start").onclick = function() {
+  if (myinterval==null){
+    myinterval = setInterval(hitnext,parseInt(time.value))
+  } else {
+    clearInterval(myinterval)
+    myinterval=null
+  }
+}
+
+document.getElementById("curr").onchange = function() {
+  current = parseInt(curr.value);
+  <!-- #id-or-getelement: current = parseInt(document.getElementById("curr").value); -->
+  updateimg();
+}
+
+// start the animation here at the end
+// myinterval = setInterval(hitnext,parseInt(time.value))
+
+</script>
