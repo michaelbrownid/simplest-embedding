@@ -104,11 +104,11 @@ def errors( truth, pred ):
 ################################
 # The tensorflow graph
 
-# input batch by two integer object numbers
-inputData = tf.placeholder(tf.int32, [None,2]) # batchsize,2
+# input batchSize by two integer object numbers
+inputData = tf.placeholder(tf.int32, [None,2])
 
-# target is probability of compatible: [Prob(!compat), Prob(compat)]
-target = tf.placeholder(tf.float32, [None,2]) # batchsize,2
+# target is batchSize probability of compatible: [1-Prob(compat), Prob(compat)]
+target = tf.placeholder(tf.float32, [None,2])
 
 # embedding
 #with tf.device("/cpu:0"):
@@ -140,19 +140,18 @@ inputs [[ 0.0630455   0.33276749 -0.02014232  0.20366192]
  [-0.11473703 -0.17519975  0.39619446  0.9422543 ]
  [-0.11473703 -0.17519975  0.0630455   0.33276749]]
 """
+# pull out the embedding vectors from integer id
 emap = tf.nn.embedding_lookup(embedding, inputData)
-inputs = tf.reshape(emap , [-1, 2*embeddingSize]) # reshape to feed pair of points as single vector per datapoint
+# reshape to feed pair of points as single vector per datapoint
+inputs = tf.reshape(emap , [-1, 2*embeddingSize]) 
 
-# Set model weights for linear function to [1-p,p] 2d prediction vector
+# Set model to linear function to logit [1-p,p] 2d prediction vector
 softmaxW = tf.Variable(tf.random_normal([2*embeddingSize,2],stddev=0.1), name="softmaxW")
 softmaxB = tf.Variable(tf.random_normal([1,2], stddev=0.1), name="softmaxB")
-
-# linear function multiply embed by W and add B
 logits = tf.matmul(inputs, softmaxW ) + softmaxB
 probs = tf.nn.softmax(logits)
 
-# cross entropy loss = \sum( -log(P prediction) of correct label.)/N
-# Jensens E(logX)<=logE(X).
+# cross entropy loss = \sum( -log(P prediction) of correct label)/N. Jensens E(logX)<=logE(X).
 cross = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits( logits, target))
 
 # optimize
@@ -179,11 +178,11 @@ def plotit(myepoch):
 
     # plot the postive class contours for the first 4 points in k,r,g,b colors
     cc=['k','r','g','b']
+    n = 32
+    x = np.linspace( np.min(myembedding[:,0]), np.max(myembedding[:,0]),n)
+    y = np.linspace(np.min(myembedding[:,1]),np.max(myembedding[:,1]) ,n)
+    xx,yy=np.meshgrid(x,y)
     for k in range(4):
-        n = 32
-        x = np.linspace( np.min(myembedding[:,0]), np.max(myembedding[:,0]),n)
-        y = np.linspace(np.min(myembedding[:,1]),np.max(myembedding[:,1]) ,n)
-        xx,yy=np.meshgrid(x,y)
         vals = np.zeros(shape=(n,n))
         for ii in range(len(x)):
             for jj in range(len(y)):
@@ -207,7 +206,7 @@ def plotit(myepoch):
             best=tp
     plt.plot(best[0],best[1],'r*',markersize=20)
 
-    plt.savefig("simplest-embedding-%d.png" % myepoch)
+    plt.savefig("simplest-embedding-%d.png" % myepoch, dpi=60)
 
     plt.close()
 
@@ -224,20 +223,27 @@ print "---- training"
 # generate data
 (trainX, trainY) = gendata(batchSize)
 
+ofp = open("simplest-embedding.training.log","w")
+
 # Fit all training data for a number of epochs
-print "epoch, cross= mean over examples of negative log likelihood"
-for epoch in range(1000):
+print >>ofp, "epoch\tcross\terr"
+for epoch in range(600):
     res = sess.run([cross, optimizer], feed_dict={inputData: trainX, target: trainY})
     print epoch, res[0]
 
     if epoch % 3 == 0:
-        print "plotit"
         results= sess.run({"cross":cross,"embedding":embedding, "softmaxW":softmaxW, "softmaxB": softmaxB, "probs":probs}, feed_dict={inputData: trainX, target: trainY})
         # pull out the variables for plotting
         myembedding= results["embedding"]
         mysoftmaxW = results["softmaxW"]
         mysoftmaxB = results["softmaxB"]
         plotit(epoch)
+
+        myerror=errors(trainY, results["probs"])
+        err = myerror[0].splitlines()[1].split("\t")[4]
+        print >>ofp, "%d\t%f\t%s" % (epoch, results["cross"],err)
+
+ofp.close()
 
 # compute final training items after training
 results= sess.run({"cross":cross,"embedding":embedding, "softmaxW":softmaxW, "softmaxB": softmaxB, "probs":probs}, feed_dict={inputData: trainX, target: trainY})
